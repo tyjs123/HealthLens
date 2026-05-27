@@ -1,0 +1,20 @@
+[
+  {
+    "name": "广州市第一人民医院",
+    "department": "内分泌科",
+    "address": "广州市越秀区盘福路1号",
+    "distance": "2.1km"
+  },
+  {
+    "name": "广东省人民医院",
+    "department": "内分泌科",
+    "address": "广州市越秀区中山二路106号",
+    "distance": "2.8km"
+  },
+  {
+    "name": "中山大学附属第一医院",
+    "department": "内分泌科",
+    "address": "广州市越秀区中山二路58号",
+    "distance": "3.0km"
+  }
+]
