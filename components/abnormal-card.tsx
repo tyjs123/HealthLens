@@ -46,7 +46,7 @@ export function AbnormalCard({ item }: AbnormalCardProps) {
             <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="text-2xl font-bold text-red-600">{item.value}</span>
               <span className="text-sm text-gray-500">{item.unit}</span>
-              <span className="text-xs text-gray-400">参考范围 {item.ref}</span>
+              <span className="text-xs text-gray-400">参考范围 {item.ref || '未标注'}</span>
             </div>
           </div>
           <Badge variant="outline" className={`shrink-0 ${config.badge}`}>

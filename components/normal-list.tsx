@@ -37,7 +37,7 @@ export function NormalList({ items }: NormalListProps) {
                     <td className="px-4 py-2.5 text-center font-medium text-gray-900">
                       {item.value} <span className="text-xs font-normal text-gray-400">{item.unit}</span>
                     </td>
-                    <td className="px-4 py-2.5 text-right text-gray-500">{item.ref}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-500">{item.ref || '-'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -46,6 +46,14 @@ export function extractCoreMetrics(
     return undefined;
   };
 
+  const height = find(['身高']);
+  const weight = find(['体重']);
+  let bmi: number | undefined;
+  if (height && weight && height > 0) {
+    const heightM = height / 100;
+    bmi = Math.round((weight / (heightM * heightM)) * 10) / 10;
+  }
+
   return {
     uricAcid: find(['尿酸']),
     bloodPressureSys: find(['收缩压', '高压']),
@@ -57,5 +65,8 @@ export function extractCoreMetrics(
     ldl: find(['低密度脂蛋白']),
     alt: find(['谷丙转氨酶', 'ALT']),
     ast: find(['谷草转氨酶', 'AST']),
+    height,
+    weight,
+    bmi,
   };
 }

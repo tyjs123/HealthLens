@@ -27,6 +27,7 @@ const metricNames: Record<string, string> = {
   ldl: '低密度脂蛋白',
   alt: '谷丙转氨酶',
   ast: '谷草转氨酶',
+  bmi: 'BMI指数',
 };
 
 const colors = [

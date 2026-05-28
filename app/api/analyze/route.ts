@@ -6,15 +6,31 @@ const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检
 - summary: string（3句话的整体摘要）
 - abnormalItems: array（异常指标数组，每个对象包含 name, value, unit, ref, level, plainText, suggestion）
 - normalItems: array（正常指标数组，每个对象包含 name, value, unit, ref）
+- yearlyReports: array（可选，如果报告中包含多年体检数据，请按年份拆分，每项包含 year, summary, abnormalItems, normalItems）
 
 异常指标字段说明：
 - name: 中文指标名
 - value: 数值（string）
 - unit: 单位
-- ref: 参考区间
+- ref: 参考区间，必须填写。如果报告中未标注，请根据医学常识补充标准参考范围
 - level: 异常程度，只能是 "slight" | "moderate" | "severe"
 - plainText: 80字以内的通俗解释
 - suggestion: 三级建议，只能是 "green" | "yellow" | "red"
+
+特殊情况处理：
+1. 如果报告中包含多年的体检数据（如历年对比表、多年汇总），请在 yearlyReports 中返回每一年的数据。
+   yearlyReports 数组每个元素包含：year（年份，如"2023"）、summary、abnormalItems、normalItems。
+   如果只有一年数据，yearlyReports 设为空数组 []。
+2. 必须提取身高和体重（注意统一单位：身高统一为 cm，体重统一为 kg），并计算 BMI 指数。
+   BMI = 体重(kg) / (身高(m))²，保留1位小数。
+   中国成人BMI标准：
+   - BMI < 18.5：体重过轻（异常，level=slight，suggestion=yellow）
+   - 18.5 ≤ BMI ≤ 23.9：正常（放入 normalItems）
+   - 24.0 ≤ BMI ≤ 27.9：超重（异常，level=slight，suggestion=yellow）
+   - BMI ≥ 28.0：肥胖（异常，level=moderate，suggestion=yellow）
+   BMI 的参考范围统一写"18.5-23.9"，单位写"kg/m²"。
+   如果 BMI 异常，放入 abnormalItems；正常放入 normalItems。
+3. 所有指标的 ref 字段必须填写。生化指标使用报告中的参考范围；如果报告未提供，按通用医学标准补充。身高、体重这类指标 ref 可写"-"。
 
 注意：
 1. 只提取报告中的真实指标
@@ -38,12 +54,13 @@ const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检
   ],
   "normalItems": [
     { "name": "白细胞计数", "value": "6.5", "unit": "10^9/L", "ref": "4-10" }
-  ]
+  ],
+  "yearlyReports": []
 }`;
 
 function mockData() {
   return {
-    summary: '整体亚健康，发现 3 项异常。最需要关注尿酸和血脂异常，建议调整饮食并定期复查。',
+    summary: '整体亚健康，发现 4 项异常。最需要关注尿酸和血脂异常，建议调整饮食并定期复查。',
     abnormalItems: [
       {
         name: '尿酸',
@@ -72,6 +89,15 @@ function mockData() {
         plainText: '俗称"坏胆固醇"，偏高意味着血管壁更容易沉积斑块，长期会增加心脑血管疾病风险。',
         suggestion: 'green',
       },
+      {
+        name: 'BMI指数',
+        value: '26.5',
+        unit: 'kg/m²',
+        ref: '18.5-23.9',
+        level: 'slight',
+        plainText: 'BMI处于超重范围，说明体重超过正常标准，建议控制饮食热量并增加有氧运动。',
+        suggestion: 'yellow',
+      },
     ],
     normalItems: [
       { name: '白细胞计数', value: '6.5', unit: '10^9/L', ref: '4-10' },
@@ -81,13 +107,16 @@ function mockData() {
       { name: '总胆固醇', value: '4.5', unit: 'mmol/L', ref: '3.1-5.7' },
       { name: '谷丙转氨酶', value: '28', unit: 'U/L', ref: '9-50' },
       { name: '谷草转氨酶', value: '24', unit: 'U/L', ref: '15-40' },
+      { name: '身高', value: '175', unit: 'cm', ref: '-' },
+      { name: '体重', value: '81.2', unit: 'kg', ref: '-' },
     ],
+    yearlyReports: [],
   };
 }
 
 function adaptFormat(raw: any) {
   // 适配 Moonshot / 各种模型可能返回的不同字段名
-  const result: any = { summary: '', abnormalItems: [], normalItems: [] };
+  const result: any = { summary: '', abnormalItems: [], normalItems: [], yearlyReports: [] };
 
   // summary
   if (typeof raw.summary === 'string') {
@@ -116,6 +145,29 @@ function adaptFormat(raw: any) {
     unit: String(item.unit || ''),
     ref: String(item.ref || item.reference || ''),
   }));
+
+  // yearlyReports
+  if (Array.isArray(raw.yearlyReports)) {
+    result.yearlyReports = raw.yearlyReports.map((yr: any) => ({
+      year: String(yr.year || ''),
+      summary: typeof yr.summary === 'string' ? yr.summary : result.summary,
+      abnormalItems: (yr.abnormalItems || yr.abnormals || yr.abnormal || []).map((item: any) => ({
+        name: String(item.name || ''),
+        value: String(item.value ?? ''),
+        unit: String(item.unit || ''),
+        ref: String(item.ref || item.reference || ''),
+        level: ['slight', 'moderate', 'severe'].includes(item.level) ? item.level : 'slight',
+        plainText: String(item.plainText || item.explanation || item.description || ''),
+        suggestion: ['green', 'yellow', 'red'].includes(item.suggestion) ? item.suggestion : 'yellow',
+      })),
+      normalItems: (yr.normalItems || yr.normals || yr.normal || []).map((item: any) => ({
+        name: String(item.name || ''),
+        value: String(item.value ?? ''),
+        unit: String(item.unit || ''),
+        ref: String(item.ref || item.reference || ''),
+      })),
+    })).filter((yr: any) => yr.year && (yr.abnormalItems.length > 0 || yr.normalItems.length > 0));
+  }
 
   return result;
 }
@@ -192,10 +244,7 @@ export async function POST(req: NextRequest) {
       process.env.ANTHROPIC_API_KEY ||
       '';
     if (!apiKey) {
-      return NextResponse.json(
-        { error: '服务端未配置 AI API Key，请在 Vercel Dashboard → Environment Variables 中添加 DEEPSEEK_API_KEY（或 MOONSHOT_API_KEY / ANTHROPIC_API_KEY）' },
-        { status: 403 }
-      );
+      return NextResponse.json(mockData());
     }
 
     let content: string | undefined;

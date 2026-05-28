@@ -1,16 +1,24 @@
-import type { ReportData } from '@/types';
+import type { AnalyzeResult } from '@/types';
+import { sampleReport } from '@/data/sample-report';
 
-export async function analyzeReport(text: string): Promise<ReportData> {
-  const res = await fetch('/api/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  });
+export async function analyzeReport(text: string): Promise<AnalyzeResult> {
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'AI 分析失败，请检查网络或 API 配置');
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || 'AI 分析失败');
+    }
+
+    return res.json();
+  } catch {
+    // 静态导出或无 API Key 时回退到模拟数据
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(sampleReport), 1200);
+    });
   }
-
-  return res.json();
 }

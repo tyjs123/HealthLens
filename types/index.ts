@@ -32,7 +32,21 @@ export interface CoreMetrics {
   ldl?: number;
   alt?: number;
   ast?: number;
+  height?: number;
+  weight?: number;
+  bmi?: number;
   [key: string]: number | undefined;
+}
+
+export interface YearlyReport {
+  year: string;
+  summary: string;
+  abnormalItems: AbnormalItem[];
+  normalItems: NormalItem[];
+}
+
+export interface AnalyzeResult extends ReportData {
+  yearlyReports?: YearlyReport[];
 }
 
 export interface HistoryReport {
