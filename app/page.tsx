@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { UploadZone } from '@/components/upload-zone';
 import { useReport } from '@/context/report-context';
-import { extractTextFromPdf } from '@/lib/pdf-parser';
+import { extractTextFromPdfByPages } from '@/lib/pdf-parser';
 import { analyzeReport } from '@/lib/deepseek';
 import { sampleReport } from '@/data/sample-report';
 import { saveReport, extractCoreMetrics } from '@/lib/storage';
@@ -83,54 +83,71 @@ export default function HomePage() {
       setStatus('正在提取文本…');
 
       try {
-        const text = await extractTextFromPdf(file);
-        if (!text || text.length < 50) {
+        // 先按页提取文本，用于检测是否包含多年数据
+        const pages = await extractTextFromPdfByPages(file);
+        const fullText = pages.map((p) => p.text).join('\n');
+
+        if (!fullText || fullText.length < 50) {
           setError('无法识别此 PDF，可能是扫描件或图片版，请使用文字版体检报告');
           toast.error('无法识别此 PDF，可能是扫描件或图片版，请使用文字版体检报告');
           return;
         }
 
-        setStatus('AI 分析中…');
-        const data: AnalyzeResult = await analyzeReport(text);
-
-        ensureBMI(data);
-        if (data.yearlyReports) {
-          data.yearlyReports.forEach((yr) => ensureBMI(yr));
+        // 按页检测年份，把同一年份的页面合并
+        const yearGroups: Record<string, string> = {};
+        for (const page of pages) {
+          const match = page.text.match(/\b(20\d{2})\b/);
+          if (match) {
+            const year = match[1];
+            yearGroups[year] = (yearGroups[year] || '') + '\n' + page.text;
+          }
         }
+        const years = Object.keys(yearGroups).sort();
 
-        // 检测文本中是否包含多个年份，用于和AI返回结果对比
-        const yearMatches = text.match(/\b20\d{2}\b/g);
-        const detectedYears = yearMatches ? Array.from(new Set(yearMatches)) : [];
+        setStatus('AI 分析中…');
 
-        // 如果包含多年数据，自动保存到本地历史记录，并展示最近一年
-        if (data.yearlyReports && data.yearlyReports.length > 0) {
-          for (const yr of data.yearlyReports) {
+        if (years.length >= 2) {
+          // 按年份分别分析（多年PDF，按页拆分）
+          const yearlyResults: { year: string; data: AnalyzeResult }[] = [];
+
+          for (const year of years) {
+            const yearText = yearGroups[year];
+            const data: AnalyzeResult = await analyzeReport(yearText);
+            ensureBMI(data);
+            yearlyResults.push({ year, data });
+
             const report: HistoryReport = {
-              id: `${Date.now()}_${yr.year}`,
-              date: `${yr.year}-06-15`,
+              id: `${Date.now()}_${year}`,
+              date: `${year}-06-15`,
               institution: '未知机构',
-              summary: yr.summary,
-              abnormalCount: yr.abnormalItems.length,
-              coreMetrics: extractCoreMetrics(yr.abnormalItems, yr.normalItems),
+              summary: data.summary,
+              abnormalCount: data.abnormalItems.length,
+              coreMetrics: extractCoreMetrics(data.abnormalItems, data.normalItems),
               fullData: {
-                summary: yr.summary,
-                abnormalItems: yr.abnormalItems,
-                normalItems: yr.normalItems,
+                summary: data.summary,
+                abnormalItems: data.abnormalItems,
+                normalItems: data.normalItems,
               },
             };
             saveReport(report);
           }
-          toast.success(`已识别并保存 ${data.yearlyReports.length} 年的体检数据`);
-          const latest = data.yearlyReports[data.yearlyReports.length - 1];
+
+          toast.success(`已识别并保存 ${years.length} 年的体检数据（${years.join('、')}）`);
+
+          // 展示最近一年的数据
+          const latest = yearlyResults[yearlyResults.length - 1].data;
           setReport({
-            rawText: text,
+            rawText: fullText,
             summary: latest.summary,
             abnormalItems: latest.abnormalItems,
             normalItems: latest.normalItems,
             fileName: file.name,
           });
         } else {
-          // 单年报告也自动保存到历史记录，确保历年趋势有数据
+          // 单年PDF：按原来方式处理
+          const data: AnalyzeResult = await analyzeReport(fullText);
+          ensureBMI(data);
+
           const report: HistoryReport = {
             id: `${Date.now()}`,
             date: new Date().toISOString().split('T')[0],
@@ -145,18 +162,10 @@ export default function HomePage() {
             },
           };
           saveReport(report);
-
-          // 如果文本里检测到多个年份但AI没拆分，给出提示
-          if (detectedYears.length >= 2) {
-            toast.warning(
-              `检测到 ${detectedYears.length} 个年份（${detectedYears.join('、')}），但AI未拆分多年数据。建议分年度上传单份报告，以获得更准确的历年趋势。`
-            );
-          } else {
-            toast.success('已保存到本地历史记录');
-          }
+          toast.success('已保存到本地历史记录');
 
           setReport({
-            rawText: text,
+            rawText: fullText,
             summary: data.summary,
             abnormalItems: data.abnormalItems || [],
             normalItems: data.normalItems || [],
