@@ -4,62 +4,12 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { UploadZone } from '@/components/upload-zone';
 import { useReport } from '@/context/report-context';
-import { extractTextFromPdfByPages } from '@/lib/pdf-parser';
+import { extractTextFromPdf } from '@/lib/pdf-parser';
 import { analyzeReport } from '@/lib/deepseek';
 import { sampleReport } from '@/data/sample-report';
-import { saveReport, extractCoreMetrics } from '@/lib/storage';
-import type { AnalyzeResult, HistoryReport } from '@/types';
 import { toast } from 'sonner';
 import { Activity, FileSearch, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
-// BMI 兜底计算：如果 AI 没返回 BMI，前端根据身高体重自动计算
-function ensureBMI(report: { abnormalItems: any[]; normalItems: any[] }) {
-  const all = [...report.abnormalItems, ...report.normalItems];
-  if (all.some((i) => i.name === 'BMI指数')) return;
-
-  const heightItem = all.find((i) => i.name.includes('身高'));
-  const weightItem = all.find((i) => i.name.includes('体重'));
-  if (!heightItem || !weightItem) return;
-
-  let height = parseFloat(String(heightItem.value).replace(/[^0-9.]/g, ''));
-  let weight = parseFloat(String(weightItem.value).replace(/[^0-9.]/g, ''));
-  if (isNaN(height) || isNaN(weight) || height <= 0) return;
-
-  // 单位标准化
-  const hUnit = String(heightItem.unit || '').toLowerCase();
-  const wUnit = String(weightItem.unit || '').toLowerCase();
-  if (hUnit.includes('m') && !hUnit.includes('cm')) height *= 100;
-  if (wUnit.includes('g') && !wUnit.includes('kg')) weight /= 1000;
-
-  const bmi = Math.round((weight / Math.pow(height / 100, 2)) * 10) / 10;
-  const base = { name: 'BMI指数', value: String(bmi), unit: 'kg/m²', ref: '18.5-23.9' };
-
-  if (bmi < 18.5) {
-    report.abnormalItems.push({
-      ...base,
-      level: 'slight',
-      plainText: 'BMI低于正常范围，体重偏轻，建议增加营养摄入并适当增肌。',
-      suggestion: 'yellow',
-    });
-  } else if (bmi <= 23.9) {
-    report.normalItems.push(base);
-  } else if (bmi <= 27.9) {
-    report.abnormalItems.push({
-      ...base,
-      level: 'slight',
-      plainText: 'BMI处于超重范围，建议控制饮食热量并增加有氧运动。',
-      suggestion: 'yellow',
-    });
-  } else {
-    report.abnormalItems.push({
-      ...base,
-      level: 'moderate',
-      plainText: 'BMI达到肥胖标准，可能增加心血管疾病和糖尿病风险，建议制定科学减重计划。',
-      suggestion: 'yellow',
-    });
-  }
-}
 
 export default function HomePage() {
   const router = useRouter();
@@ -83,95 +33,23 @@ export default function HomePage() {
       setStatus('正在提取文本…');
 
       try {
-        // 先按页提取文本，用于检测是否包含多年数据
-        const pages = await extractTextFromPdfByPages(file);
-        const fullText = pages.map((p) => p.text).join('\n');
-
-        if (!fullText || fullText.length < 50) {
+        const text = await extractTextFromPdf(file);
+        if (!text || text.length < 50) {
           setError('无法识别此 PDF，可能是扫描件或图片版，请使用文字版体检报告');
           toast.error('无法识别此 PDF，可能是扫描件或图片版，请使用文字版体检报告');
           return;
         }
 
-        // 按页检测年份，把同一年份的页面合并
-        const yearGroups: Record<string, string> = {};
-        for (const page of pages) {
-          const match = page.text.match(/\b(20\d{2})\b/);
-          if (match) {
-            const year = match[1];
-            yearGroups[year] = (yearGroups[year] || '') + '\n' + page.text;
-          }
-        }
-        const years = Object.keys(yearGroups).sort();
-
         setStatus('AI 分析中…');
+        const data = await analyzeReport(text);
 
-        if (years.length >= 2) {
-          // 按年份分别分析（多年PDF，按页拆分）
-          const yearlyResults: { year: string; data: AnalyzeResult }[] = [];
-
-          for (const year of years) {
-            const yearText = yearGroups[year];
-            const data: AnalyzeResult = await analyzeReport(yearText);
-            ensureBMI(data);
-            yearlyResults.push({ year, data });
-
-            const report: HistoryReport = {
-              id: `${Date.now()}_${year}`,
-              date: `${year}-06-15`,
-              institution: '未知机构',
-              summary: data.summary,
-              abnormalCount: data.abnormalItems.length,
-              coreMetrics: extractCoreMetrics(data.abnormalItems, data.normalItems),
-              fullData: {
-                summary: data.summary,
-                abnormalItems: data.abnormalItems,
-                normalItems: data.normalItems,
-              },
-            };
-            saveReport(report);
-          }
-
-          toast.success(`已识别并保存 ${years.length} 年的体检数据（${years.join('、')}）`);
-
-          // 展示最近一年的数据
-          const latest = yearlyResults[yearlyResults.length - 1].data;
-          setReport({
-            rawText: fullText,
-            summary: latest.summary,
-            abnormalItems: latest.abnormalItems,
-            normalItems: latest.normalItems,
-            fileName: file.name,
-          });
-        } else {
-          // 单年PDF：按原来方式处理
-          const data: AnalyzeResult = await analyzeReport(fullText);
-          ensureBMI(data);
-
-          const report: HistoryReport = {
-            id: `${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
-            institution: '未知机构',
-            summary: data.summary,
-            abnormalCount: data.abnormalItems.length,
-            coreMetrics: extractCoreMetrics(data.abnormalItems, data.normalItems),
-            fullData: {
-              summary: data.summary,
-              abnormalItems: data.abnormalItems,
-              normalItems: data.normalItems,
-            },
-          };
-          saveReport(report);
-          toast.success('已保存到本地历史记录');
-
-          setReport({
-            rawText: fullText,
-            summary: data.summary,
-            abnormalItems: data.abnormalItems || [],
-            normalItems: data.normalItems || [],
-            fileName: file.name,
-          });
-        }
+        setReport({
+          rawText: text,
+          summary: data.summary,
+          abnormalItems: data.abnormalItems || [],
+          normalItems: data.normalItems || [],
+          fileName: file.name,
+        });
 
         setStatus('生成解读中…');
         router.push('/report');

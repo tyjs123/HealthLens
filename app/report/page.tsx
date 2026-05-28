@@ -1,58 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useReport } from '@/context/report-context';
 import { SummaryHeader } from '@/components/summary-header';
 import { AbnormalCard } from '@/components/abnormal-card';
 import { NormalList } from '@/components/normal-list';
-import { TrendChart } from '@/components/trend-chart';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
-import { getHistory, saveReport, extractCoreMetrics } from '@/lib/storage';
-import type { HistoryReport } from '@/types';
-import { Save, Share2, History, FileUp } from 'lucide-react';
+import { Share2, FileUp } from 'lucide-react';
 
 export default function ReportPage() {
   const router = useRouter();
   const { state, clearReport } = useReport();
-  const [saved, setSaved] = useState(false);
-  const [history, setHistory] = useState<HistoryReport[]>([]);
-
-  useEffect(() => {
-    setHistory(getHistory());
-  }, []);
 
   useEffect(() => {
     if (!state.summary && !state.isLoading) {
       router.push('/');
     }
   }, [state.summary, state.isLoading, router]);
-
-  const handleSave = () => {
-    try {
-      const id = `${Date.now()}`;
-      const date = new Date().toISOString().split('T')[0];
-      const report: HistoryReport = {
-        id,
-        date,
-        institution: state.institution || '未知机构',
-        summary: state.summary,
-        abnormalCount: state.abnormalItems.length,
-        coreMetrics: extractCoreMetrics(state.abnormalItems, state.normalItems),
-        fullData: {
-          summary: state.summary,
-          abnormalItems: state.abnormalItems,
-          normalItems: state.normalItems,
-        },
-      };
-      saveReport(report);
-      setSaved(true);
-      toast.success('已保存到本地历史记录');
-    } catch {
-      toast.error('本地存储已满，请删除历史记录后再保存');
-    }
-  };
 
   const handleShare = async () => {
     try {
@@ -63,7 +28,6 @@ export default function ReportPage() {
         });
       } else {
         await navigator.clipboard.writeText(state.summary);
-        toast.success('摘要已复制到剪贴板');
       }
     } catch {
       // ignore
@@ -93,15 +57,6 @@ export default function ReportPage() {
           <FileUp className="mr-1.5 h-4 w-4" />
           重新上传
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push('/history')}
-          className="text-gray-600"
-        >
-          <History className="mr-1.5 h-4 w-4" />
-          历史记录
-        </Button>
       </div>
 
       {/* 摘要区 */}
@@ -114,10 +69,6 @@ export default function ReportPage() {
 
       {/* 操作按钮 */}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button size="sm" onClick={handleSave} disabled={saved} className="h-9">
-          <Save className="mr-1.5 h-4 w-4" />
-          {saved ? '已保存' : '保存本次解读'}
-        </Button>
         <Button variant="outline" size="sm" onClick={handleShare} className="h-9">
           <Share2 className="mr-1.5 h-4 w-4" />
           分享摘要
@@ -155,15 +106,6 @@ export default function ReportPage() {
             <NormalList items={state.normalItems} />
           </div>
         )}
-      </section>
-
-      {/* 历年趋势 */}
-      <section className="mt-10">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
-          <span className="inline-block h-5 w-1 rounded-full bg-emerald-500"></span>
-          历年趋势
-        </h2>
-        <TrendChart reports={history} />
       </section>
     </div>
   );
