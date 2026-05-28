@@ -98,6 +98,10 @@ export default function HomePage() {
           data.yearlyReports.forEach((yr) => ensureBMI(yr));
         }
 
+        // 检测文本中是否包含多个年份，用于和AI返回结果对比
+        const yearMatches = text.match(/\b20\d{2}\b/g);
+        const detectedYears = yearMatches ? Array.from(new Set(yearMatches)) : [];
+
         // 如果包含多年数据，自动保存到本地历史记录，并展示最近一年
         if (data.yearlyReports && data.yearlyReports.length > 0) {
           for (const yr of data.yearlyReports) {
@@ -116,6 +120,7 @@ export default function HomePage() {
             };
             saveReport(report);
           }
+          toast.success(`已识别并保存 ${data.yearlyReports.length} 年的体检数据`);
           const latest = data.yearlyReports[data.yearlyReports.length - 1];
           setReport({
             rawText: text,
@@ -125,6 +130,31 @@ export default function HomePage() {
             fileName: file.name,
           });
         } else {
+          // 单年报告也自动保存到历史记录，确保历年趋势有数据
+          const report: HistoryReport = {
+            id: `${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
+            institution: '未知机构',
+            summary: data.summary,
+            abnormalCount: data.abnormalItems.length,
+            coreMetrics: extractCoreMetrics(data.abnormalItems, data.normalItems),
+            fullData: {
+              summary: data.summary,
+              abnormalItems: data.abnormalItems,
+              normalItems: data.normalItems,
+            },
+          };
+          saveReport(report);
+
+          // 如果文本里检测到多个年份但AI没拆分，给出提示
+          if (detectedYears.length >= 2) {
+            toast.warning(
+              `检测到 ${detectedYears.length} 个年份（${detectedYears.join('、')}），但AI未拆分多年数据。建议分年度上传单份报告，以获得更准确的历年趋势。`
+            );
+          } else {
+            toast.success('已保存到本地历史记录');
+          }
+
           setReport({
             rawText: text,
             summary: data.summary,
