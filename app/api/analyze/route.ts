@@ -192,7 +192,10 @@ export async function POST(req: NextRequest) {
       process.env.ANTHROPIC_API_KEY ||
       '';
     if (!apiKey) {
-      return NextResponse.json(mockData());
+      return NextResponse.json(
+        { error: '服务端未配置 AI API Key，请在 Vercel Dashboard → Environment Variables 中添加 DEEPSEEK_API_KEY（或 MOONSHOT_API_KEY / ANTHROPIC_API_KEY）' },
+        { status: 403 }
+      );
     }
 
     let content: string | undefined;
