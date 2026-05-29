@@ -7,6 +7,7 @@ import { SummaryHeader } from '@/components/summary-header';
 import { AbnormalCard } from '@/components/abnormal-card';
 import { NormalList } from '@/components/normal-list';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { Share2, FileUp } from 'lucide-react';
 
 export default function ReportPage() {
@@ -28,6 +29,7 @@ export default function ReportPage() {
         });
       } else {
         await navigator.clipboard.writeText(state.summary);
+        toast.success('摘要已复制到剪贴板');
       }
     } catch {
       // ignore

@@ -10,6 +10,55 @@ import { sampleReport } from '@/data/sample-report';
 import { toast } from 'sonner';
 import { Activity, FileSearch, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { AnalyzeResult } from '@/types';
+
+// BMI 兜底计算：如果 AI 没返回 BMI，前端根据身高体重自动计算
+function ensureBMI(report: { abnormalItems: any[]; normalItems: any[] }) {
+  const all = [...report.abnormalItems, ...report.normalItems];
+  if (all.some((i) => i.name === 'BMI指数')) return;
+
+  const heightItem = all.find((i) => i.name.includes('身高'));
+  const weightItem = all.find((i) => i.name.includes('体重'));
+  if (!heightItem || !weightItem) return;
+
+  let height = parseFloat(String(heightItem.value).replace(/[^0-9.]/g, ''));
+  let weight = parseFloat(String(weightItem.value).replace(/[^0-9.]/g, ''));
+  if (isNaN(height) || isNaN(weight) || height <= 0) return;
+
+  // 单位标准化
+  const hUnit = String(heightItem.unit || '').toLowerCase();
+  const wUnit = String(weightItem.unit || '').toLowerCase();
+  if (hUnit.includes('m') && !hUnit.includes('cm')) height *= 100;
+  if (wUnit.includes('g') && !wUnit.includes('kg')) weight /= 1000;
+
+  const bmi = Math.round((weight / Math.pow(height / 100, 2)) * 10) / 10;
+  const base = { name: 'BMI指数', value: String(bmi), unit: 'kg/m²', ref: '18.5-23.9' };
+
+  if (bmi < 18.5) {
+    report.abnormalItems.push({
+      ...base,
+      level: 'slight',
+      plainText: 'BMI低于正常范围，体重偏轻，建议增加营养摄入并适当增肌。',
+      suggestion: 'yellow',
+    });
+  } else if (bmi <= 23.9) {
+    report.normalItems.push(base);
+  } else if (bmi <= 27.9) {
+    report.abnormalItems.push({
+      ...base,
+      level: 'slight',
+      plainText: 'BMI处于超重范围，建议控制饮食热量并增加有氧运动。',
+      suggestion: 'yellow',
+    });
+  } else {
+    report.abnormalItems.push({
+      ...base,
+      level: 'moderate',
+      plainText: 'BMI达到肥胖标准，可能增加心血管疾病和糖尿病风险，建议制定科学减重计划。',
+      suggestion: 'yellow',
+    });
+  }
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -41,7 +90,8 @@ export default function HomePage() {
         }
 
         setStatus('AI 分析中…');
-        const data = await analyzeReport(text);
+        const data: AnalyzeResult = await analyzeReport(text);
+        ensureBMI(data);
 
         setReport({
           rawText: text,

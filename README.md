@@ -21,8 +21,7 @@
 | 📄 **PDF 智能解析** | 提取文字版体检报告中的全部指标，自动分类正常 / 异常 |
 | 🤖 **多模型 AI 解读** | 支持 DeepSeek、Moonshot(Kimi)、Claude 等多种大模型 |
 | ⚡ **异常指标可视化** | 按严重程度分级（轻微 / 中度 / 严重），附带通俗科普解释 |
-| 📊 **历年趋势对比** | 本地保存历史报告，生成核心指标变化趋势图 |
-| 💾 **本地隐私优先** | 报告数据仅存储在浏览器本地，不上传云端 |
+| 🔒 **本地隐私优先** | PDF 解析完全在浏览器本地完成，原始文件不上传云端 |
 | 📱 **响应式设计** | 桌面端、移动端完美适配 |
 
 ## 🚀 快速开始
@@ -80,7 +79,6 @@ npm run build
 - **框架**: [Next.js 14](https://nextjs.org/) (App Router)
 - **语言**: [TypeScript](https://www.typescriptlang.org/)
 - **样式**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
-- **图表**: [Recharts](https://recharts.org/)
 - **PDF 解析**: [pdfjs-dist](https://github.com/mozilla/pdf.js)
 - **AI 接口**: OpenAI 兼容 API / Claude API
 
@@ -90,7 +88,6 @@ npm run build
 healthlens/
 ├── app/                    # Next.js App Router
 │   ├── api/analyze/        # AI 分析 API 路由
-│   ├── history/            # 历史记录页面
 │   ├── report/             # 报告解读结果页
 │   ├── page.tsx            # 首页（上传页）
 │   └── layout.tsx          # 根布局
@@ -98,13 +95,11 @@ healthlens/
 │   ├── upload-zone.tsx     # 文件上传拖拽区
 │   ├── abnormal-card.tsx   # 异常指标卡片
 │   ├── normal-list.tsx     # 正常指标列表
-│   ├── summary-header.tsx  # 报告摘要头部
-│   └── trend-chart.tsx     # 历年趋势图表
+│   └── summary-header.tsx  # 报告摘要头部
 ├── context/                # React Context（报告状态管理）
 ├── lib/                    # 工具库
 │   ├── pdf-parser.ts       # PDF 文本提取
 │   ├── deepseek.ts         # AI 分析客户端
-│   ├── storage.ts          # 本地存储（localStorage）
 │   └── utils.ts            # 通用工具函数
 ├── data/                   # 静态数据
 │   ├── sample-report.ts    # 示例报告数据
@@ -116,7 +111,6 @@ healthlens/
 
 ## 🔒 隐私说明
 
-- 体检报告数据**仅保存在浏览器本地**（localStorage），不会上传到任何服务器。
 - AI 分析时，仅将报告的**文本内容**发送至你配置的 AI 服务商（DeepSeek / Moonshot / Claude 等）。
 - 不上传原始 PDF 文件到云端，PDF 解析完全在浏览器本地完成。
 
