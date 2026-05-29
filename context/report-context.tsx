@@ -1,7 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import type { AbnormalItem, NormalItem } from '@/types';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import type { AbnormalItem, NormalItem, HistoryReport, CoreMetrics } from '@/types';
+import { saveReport, extractCoreMetrics, getHistory, deleteReport as deleteFromStorage, clearAll as clearStorage } from '@/lib/storage';
 
 interface ReportState {
   rawText: string;
@@ -21,6 +22,10 @@ interface ReportContextType {
   clearReport: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  saveToHistory: () => void;
+  history: HistoryReport[];
+  deleteFromHistory: (id: string) => void;
+  clearHistory: () => void;
 }
 
 const defaultState: ReportState = {
@@ -39,6 +44,11 @@ const ReportContext = createContext<ReportContextType | undefined>(undefined);
 
 export function ReportProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ReportState>(defaultState);
+  const [history, setHistory] = useState<HistoryReport[]>([]);
+
+  useEffect(() => {
+    setHistory(getHistory());
+  }, []);
 
   const setReport = useCallback((data: Partial<ReportState>) => {
     setState((prev) => ({ ...prev, ...data, error: null }));
@@ -56,8 +66,40 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, error, isLoading: false }));
   }, []);
 
+  const saveToHistory = useCallback(() => {
+    if (!state.summary) return;
+
+    const coreMetrics = extractCoreMetrics(state.abnormalItems, state.normalItems);
+    const report: HistoryReport = {
+      id: `${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`,
+      date: state.reportDate || new Date().toISOString().split('T')[0],
+      institution: state.institution,
+      summary: state.summary,
+      abnormalCount: state.abnormalItems.length,
+      coreMetrics,
+      fullData: {
+        summary: state.summary,
+        abnormalItems: state.abnormalItems,
+        normalItems: state.normalItems,
+      },
+    };
+
+    saveReport(report);
+    setHistory(getHistory());
+  }, [state]);
+
+  const deleteFromHistory = useCallback((id: string) => {
+    deleteFromStorage(id);
+    setHistory(getHistory());
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    clearStorage();
+    setHistory([]);
+  }, []);
+
   return (
-    <ReportContext.Provider value={{ state, setReport, clearReport, setLoading, setError }}>
+    <ReportContext.Provider value={{ state, setReport, clearReport, setLoading, setError, saveToHistory, history, deleteFromHistory, clearHistory }}>
       {children}
     </ReportContext.Provider>
   );
