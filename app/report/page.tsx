@@ -8,7 +8,6 @@ import { AbnormalCard } from '@/components/abnormal-card';
 import { NormalList } from '@/components/normal-list';
 import { TrendChart } from '@/components/trend-chart';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Share2, FileUp, Save, History } from 'lucide-react';
 
@@ -101,50 +100,52 @@ export default function ReportPage() {
         </Button>
       </div>
 
-      {/* Tabs 切换：指标解读 / 历年趋势 */}
-      <Tabs defaultValue="interpretation" className="mt-10">
-        <TabsList>
-          <TabsTrigger value="interpretation">指标解读</TabsTrigger>
-          <TabsTrigger value="trend">历年趋势</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="interpretation" className="mt-6">
-          {/* 异常指标 */}
-          {sortedAbnormal.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {sortedAbnormal.map((item) => (
-                <AbnormalCard key={item.name} item={item} />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
-              <p className="text-sm text-gray-500">未发现异常指标，继续保持！</p>
-            </div>
+      {/* 指标解读 */}
+      <section className="mt-10">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <span className="inline-block h-5 w-1 rounded-full bg-blue-600"></span>
+          指标解读
+          {sortedAbnormal.length > 0 && (
+            <span className="text-sm font-normal text-gray-500">
+              共 {sortedAbnormal.length} 项异常
+            </span>
           )}
+        </h2>
 
-          {/* 正常指标 */}
-          {state.normalItems.length > 0 && (
-            <div className="mt-4">
-              <NormalList items={state.normalItems} />
-            </div>
+        {/* 异常指标 */}
+        {sortedAbnormal.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {sortedAbnormal.map((item) => (
+              <AbnormalCard key={item.name} item={item} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+            <p className="text-sm text-gray-500">未发现异常指标，继续保持！</p>
+          </div>
+        )}
+
+        {/* 正常指标 */}
+        {state.normalItems.length > 0 && (
+          <div className="mt-4">
+            <NormalList items={state.normalItems} />
+          </div>
+        )}
+      </section>
+
+      {/* 历年趋势 */}
+      <section className="mt-10">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <span className="inline-block h-5 w-1 rounded-full bg-green-600"></span>
+          历年趋势
+          {history.length > 0 && (
+            <span className="text-sm font-normal text-gray-500">
+              共 {history.length} 份报告
+            </span>
           )}
-        </TabsContent>
-
-        <TabsContent value="trend" className="mt-6">
-          <section>
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
-              <span className="inline-block h-5 w-1 rounded-full bg-blue-600"></span>
-              历年趋势
-              {history.length > 0 && (
-                <span className="text-sm font-normal text-gray-500">
-                  共 {history.length} 份报告
-                </span>
-              )}
-            </h2>
-            <TrendChart history={history} />
-          </section>
-        </TabsContent>
-      </Tabs>
+        </h2>
+        <TrendChart history={history} />
+      </section>
     </div>
   );
 }
