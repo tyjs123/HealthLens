@@ -99,6 +99,8 @@ export default function HomePage() {
           abnormalItems: data.abnormalItems || [],
           normalItems: data.normalItems || [],
           fileName: file.name,
+          reportDate: data.reportDate || '',
+          institution: data.institution || '',
         });
 
         setStatus('生成解读中…');

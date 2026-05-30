@@ -30,6 +30,8 @@ export interface YearlyReport {
 
 export interface AnalyzeResult extends ReportData {
   yearlyReports?: YearlyReport[];
+  reportDate?: string;
+  institution?: string;
 }
 
 export interface CoreMetrics {
