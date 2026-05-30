@@ -1,96 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检报告文本中提取所有指标，并以严格 JSON 格式返回。
+const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检报告文本中提取所有信息，并以严格 JSON 格式返回。
 
 必须包含以下字段：
 - summary: string（3句话的整体摘要）
 - abnormalItems: array（异常指标数组，每个对象包含 name, value, unit, ref, level, plainText, suggestion）
 - normalItems: array（正常指标数组，每个对象包含 name, value, unit, ref）
-- yearlyReports: array（如果只有一年数据则填 []；如果报告中包含多年体检数据，必须按年份拆分，每项包含 year, summary, abnormalItems, normalItems）
+- yearlyReports: array（如果只有一年数据则填 []；如果报告中包含多年体检数据，必须按年份拆分）
+- reportDate: string（体检日期，格式如 2024-01-15，如果能找到年月日请尽量精确）
+- institution: string（体检机构名称）
 
 异常指标字段说明：
 - name: 中文指标名
 - value: 数值（string）
 - unit: 单位
-- ref: 参考区间，必须填写。如果报告中未标注，请根据医学常识补充标准参考范围
+- ref: 参考区间，必须填写
 - level: 异常程度，只能是 "slight" | "moderate" | "severe"
 - plainText: 80字以内的通俗解释
 - suggestion: 三级建议，只能是 "green" | "yellow" | "red"
 
-多年数据处理（非常重要）：
-1. 仔细判断文本中是否包含多年数据。常见的多年数据格式包括：
-   - 历年对比表（同一指标有多列不同年份的数值）
-   - 多年汇总报告（文本中出现多个体检日期和对应的指标）
-   - 报告标题或页眉中标注了不同年份
-2. 如果确认包含多年数据， yearlyReports 中必须包含每一年的完整数据，year 字段填写该年份（如"2022"、"2023"、"2024"）。
-3. 如果只有一年数据，yearlyReports 必须设为空数组 []，不要省略此字段。
-4. 返回多年数据时，顶层 summary / abnormalItems / normalItems 可填写最近一年的数据。
+体检日期提取规则（非常重要）：
+1. 仔细查找报告中的日期，通常在标题、页眉或表格中
+2. 优先提取体检日期（不是打印日期或报告日期）
+3. 日期格式统一为 YYYY-MM-DD，如 "2024-03-15"
+4. 如果只找到年份，如 2024年，则填写 "2024"
+5. 如果完全找不到日期，设为空字符串 ""
+
+机构名称提取：
+1. 查找报告中的体检机构名称，通常在标题或页眉
+2. 常见关键词：体检中心、医院名称、检测机构
+3. 如果找不到，设为空字符串 ""
 
 BMI 计算：
-1. 必须提取身高和体重（统一单位：身高 cm，体重 kg），计算 BMI = 体重(kg) / (身高(m))²，保留1位小数。
+1. 必须提取身高和体重，计算 BMI = 体重(kg) / (身高(m))²
 2. 中国成人BMI标准：
-   - BMI < 18.5：体重过轻（异常，level=slight，suggestion=yellow）
-   - 18.5 ≤ BMI ≤ 23.9：正常（放入 normalItems）
-   - 24.0 ≤ BMI ≤ 27.9：超重（异常，level=slight，suggestion=yellow）
-   - BMI ≥ 28.0：肥胖（异常，level=moderate，suggestion=yellow）
-3. BMI 参考范围写"18.5-23.9"，单位写"kg/m²"。
+   - BMI < 18.5：体重过轻（异常）
+   - 18.5 ≤ BMI ≤ 23.9：正常
+   - 24.0 ≤ BMI ≤ 27.9：超重
+   - BMI ≥ 28.0：肥胖
 
-参考范围要求：
-- 所有指标的 ref 字段必须填写。生化指标使用报告中的参考范围；如果报告未提供，按通用医学标准补充。身高、体重 ref 可写"-"。
-
-注意：
-1. 只提取报告中的真实指标
-2. 异常指标是超出参考区间或有箭头标记的
-3. 正常指标是在参考区间内的
-4. 只做信息整理和科普解释，不做医疗诊断
-
-示例1（单年数据）：
+示例输出：
 {
-  "summary": "整体亚健康，发现2项异常。最需要关注尿酸和血脂异常，建议调整饮食并定期复查。",
-  "abnormalItems": [
-    {
-      "name": "尿酸",
-      "value": "450",
-      "unit": "μmol/L",
-      "ref": "208-428",
-      "level": "slight",
-      "plainText": "尿酸比正常值高，说明嘌呤代谢偏慢，长期可能引发痛风。",
-      "suggestion": "yellow"
-    }
-  ],
-  "normalItems": [
-    { "name": "白细胞计数", "value": "6.5", "unit": "10^9/L", "ref": "4-10" }
-  ],
-  "yearlyReports": []
-}
-
-示例2（多年数据，必须返回yearlyReports）：
-{
-  "summary": "2024年体检发现3项异常，需关注血脂和BMI。",
+  "summary": "整体亚健康，发现2项异常。",
   "abnormalItems": [...],
   "normalItems": [...],
-  "yearlyReports": [
-    {
-      "year": "2022",
-      "summary": "2022年体检基本正常。",
-      "abnormalItems": [],
-      "normalItems": [
-        { "name": "白细胞计数", "value": "6.2", "unit": "10^9/L", "ref": "4-10" }
-      ]
-    },
-    {
-      "year": "2023",
-      "summary": "2023年发现1项异常。",
-      "abnormalItems": [...],
-      "normalItems": [...]
-    },
-    {
-      "year": "2024",
-      "summary": "2024年发现3项异常。",
-      "abnormalItems": [...],
-      "normalItems": [...]
-    }
-  ]
+  "yearlyReports": [],
+  "reportDate": "2024-03-15",
+  "institution": "美年大健康"
 }`;
 
 function mockData() {
@@ -146,12 +102,69 @@ function mockData() {
       { name: '体重', value: '81.2', unit: 'kg', ref: '-' },
     ],
     yearlyReports: [],
+    reportDate: '',
+    institution: '',
   };
 }
 
-function adaptFormat(raw: any) {
-  // 适配 Moonshot / 各种模型可能返回的不同字段名
-  const result: any = { summary: '', abnormalItems: [], normalItems: [], yearlyReports: [] };
+function extractDate(text: string): string {
+  // 尝试从文本中提取日期
+  // 常见格式：2024年3月15日、2024-03-15、2024/03/15、2024.03.15
+
+  // 优先查找体检日期相关的关键词
+  const patterns = [
+    // 体检日期
+    /(?:体检日期|检查日期|检查时间|体检时间|报告日期)[：:]\s*(\d{4}[年\-/\.]\d{1,2}[月\-/\.]\d{1,2}日?)/i,
+    // 通用日期格式
+    /(\d{4}[年\-/\.]\d{1,2}[月\-/\.]\d{1,2})日?/,
+    // 只有年月
+    /(\d{4}年\d{1,2}月)/,
+    // 只有年份
+    /(\d{4})年/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      let dateStr = match[1] || match[0];
+      // 统一格式化
+      dateStr = dateStr.replace(/[年]/g, '-').replace(/[月]/g, '-').replace(/日/g, '').replace(/\./g, '-').replace(/\//g, '-');
+      // 去掉多余的连字符
+      dateStr = dateStr.replace(/-+/g, '-').replace(/-$/, '');
+      return dateStr;
+    }
+  }
+
+  return '';
+}
+
+function extractInstitution(text: string): string {
+  // 常见体检机构关键词
+  const patterns = [
+    /(?:体检中心|医院|体检机构)[：:]\s*([^\n\r\d]{2,20})/i,
+    /(?:美年大健康|爱康国宾|慈铭|瑞慈|美兆)[^\n\r]*/i,
+    /^([^\n\r]{5,30}体检[中心医院])/im,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+
+  return '';
+}
+
+function adaptFormat(raw: any, text?: string) {
+  const result: any = {
+    summary: '',
+    abnormalItems: [],
+    normalItems: [],
+    yearlyReports: [],
+    reportDate: '',
+    institution: '',
+  };
 
   // summary
   if (typeof raw.summary === 'string') {
@@ -160,7 +173,7 @@ function adaptFormat(raw: any) {
     result.summary = raw.summary.join('');
   }
 
-  // abnormalItems / abnormals
+  // abnormalItems
   const abnormals = raw.abnormalItems || raw.abnormals || raw.abnormal || [];
   result.abnormalItems = abnormals.map((item: any) => ({
     name: String(item.name || ''),
@@ -172,7 +185,7 @@ function adaptFormat(raw: any) {
     suggestion: ['green', 'yellow', 'red'].includes(item.suggestion) ? item.suggestion : 'yellow',
   }));
 
-  // normalItems / normals
+  // normalItems
   const normals = raw.normalItems || raw.normals || raw.normal || [];
   result.normalItems = normals.map((item: any) => ({
     name: String(item.name || ''),
@@ -202,6 +215,26 @@ function adaptFormat(raw: any) {
         ref: String(item.ref || item.reference || ''),
       })),
     })).filter((yr: any) => yr.year && (yr.abnormalItems.length > 0 || yr.normalItems.length > 0));
+  }
+
+  // 从 AI 返回结果中提取日期
+  if (raw.reportDate && typeof raw.reportDate === 'string') {
+    result.reportDate = raw.reportDate;
+  }
+
+  // 从原始文本中提取日期
+  if (!result.reportDate && text) {
+    result.reportDate = extractDate(text);
+  }
+
+  // 从 AI 返回结果中提取机构
+  if (raw.institution && typeof raw.institution === 'string') {
+    result.institution = raw.institution;
+  }
+
+  // 从原始文本中提取机构
+  if (!result.institution && text) {
+    result.institution = extractInstitution(text);
   }
 
   return result;
@@ -336,7 +369,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const parsed = extractJson(content);
-      const adapted = adaptFormat(parsed);
+      const adapted = adaptFormat(parsed, text);
 
       // 校验关键字段
       if (
