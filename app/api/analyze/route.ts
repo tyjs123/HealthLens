@@ -7,8 +7,8 @@ const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检
 - summary: string（3句话的整体摘要）
 - abnormalItems: array（异常指标数组，每个对象包含 name, value, unit, ref, level, plainText, suggestion）
 - normalItems: array（正常指标数组，每个对象包含 name, value, unit, ref）
-- yearlyReports: array（如果只有一年数据则填 []；如果报告中包含多年体检数据，必须按年份拆分）
-- reportDate: string（体检日期，格式如 2024-01-15，如果能找到年月日请尽量精确）
+- yearlyReports: array（如果只有一年数据则填 []；如果报告中包含多年体检数据，必须按年份拆分，见下方规则）
+- reportDate: string（最近一年的体检日期，格式如 2024-01-15，如果能找到年月日请尽量精确）
 - institution: string（体检机构名称）
 
 异常指标字段说明：
@@ -20,9 +20,18 @@ const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检
 - plainText: 80字以内的通俗解释
 - suggestion: 三级建议，只能是 "green" | "yellow" | "red"
 
+多年报告拆分规则（非常重要）：
+1. 如果 PDF 中包含多个年份的体检数据（如 2024、2025、2026），必须在 yearlyReports 中按年份严格拆分
+2. 每个 yearlyReport 的 year 字段必须填写该年份（如 "2024"、"2025"、"2026"）
+3. 每个 yearlyReport 的 abnormalItems 和 normalItems 必须只包含该年份对应的体检指标，严禁将某一年数据复制到其他年份
+4. 识别年份的方法：查找表格标题、页眉、页面顶部或章节开头标注的年份信息
+5. 主报告的 abnormalItems 和 normalItems 应该汇总所有年份的异常指标（去重合并），summary 应对所有年份做整体概述
+6. 如果无法确定某个指标属于哪一年，优先放入最近一年的 yearlyReport 中
+7. 每个 yearlyReport 必须独立完整，不能只放部分指标
+
 体检日期提取规则（非常重要）：
 1. 仔细查找报告中的日期，通常在标题、页眉或表格中
-2. 优先提取体检日期（不是打印日期或报告日期）
+2. 优先提取最近一年的体检日期（不是打印日期、报告日期，也不是出生日期）
 3. 日期格式统一为 YYYY-MM-DD，如 "2024-03-15"
 4. 如果只找到年份，如 2024年，则填写 "2024"
 5. 如果完全找不到日期，设为空字符串 ""
@@ -184,7 +193,7 @@ function adaptFormat(raw: any, text?: string) {
         unit: String(item.unit || ''),
         ref: String(item.ref || item.reference || ''),
       })),
-    })).filter((yr: any) => yr.year && (yr.abnormalItems.length > 0 || yr.normalItems.length > 0));
+    })).filter((yr: any) => yr.abnormalItems.length > 0 || yr.normalItems.length > 0);
   }
 
   // 从 AI 返回结果中提取日期

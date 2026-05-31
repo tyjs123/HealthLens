@@ -101,10 +101,24 @@ export default function HomePage() {
 
         // 如果包含多年报告数据，自动保存各年份到历史记录
         if (data.yearlyReports && data.yearlyReports.length > 0) {
+          // 从各年份内容中尝试提取更精确的日期
+          const getYearDate = (yr: any) => {
+            if (yr.year?.trim()) return yr.year.trim();
+            // 从该年份的指标中尝试找日期
+            const allItems = [...(yr.abnormalItems || []), ...(yr.normalItems || [])];
+            for (const item of allItems) {
+              if (item.value && /^\d{4}[\-/年]/.test(item.value)) {
+                return item.value;
+              }
+            }
+            return '';
+          };
+
           for (const yr of data.yearlyReports) {
+            const yrDate = getYearDate(yr) || reportDate || '';
             const report: HistoryReport = {
-              id: `${new Date().getTime()}_${Math.random().toString(36).substring(2, 11)}`,
-              date: yr.year?.trim() || reportDate || new Date().toISOString().split('T')[0],
+              id: `${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`,
+              date: yrDate,
               institution: data.institution || '',
               summary: yr.summary || data.summary,
               abnormalCount: yr.abnormalItems.length,
