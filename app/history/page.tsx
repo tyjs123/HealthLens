@@ -33,9 +33,9 @@ export default function HistoryPage() {
   const handleViewReport = (report: HistoryReport) => {
     setReport({
       rawText: '',
-      summary: report.fullData.summary,
-      abnormalItems: report.fullData.abnormalItems,
-      normalItems: report.fullData.normalItems,
+      summary: report.fullData?.summary ?? '',
+      abnormalItems: report.fullData?.abnormalItems ?? [],
+      normalItems: report.fullData?.normalItems ?? [],
       reportDate: report.date,
       institution: report.institution,
       fileName: `历史报告_${report.date}.pdf`,

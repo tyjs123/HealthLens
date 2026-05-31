@@ -65,7 +65,7 @@ function ensureBMI(report: { abnormalItems: any[]; normalItems: any[] }) {
 
 export default function HomePage() {
   const router = useRouter();
-  const { setReport, setLoading, setError, clearReport } = useReport();
+  const { state, setReport, setLoading, setError, clearReport } = useReport();
   const [status, setStatus] = useState('');
 
   const handleUpload = useCallback(
@@ -103,7 +103,7 @@ export default function HomePage() {
         if (data.yearlyReports && data.yearlyReports.length > 0) {
           for (const yr of data.yearlyReports) {
             const report: HistoryReport = {
-              id: `${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`,
+              id: `${new Date().getTime()}_${Math.random().toString(36).substring(2, 11)}`,
               date: yr.year?.trim() || reportDate || new Date().toISOString().split('T')[0],
               institution: data.institution || '',
               summary: yr.summary || data.summary,
@@ -151,11 +151,13 @@ export default function HomePage() {
       abnormalItems: sampleReport.abnormalItems,
       normalItems: sampleReport.normalItems,
       fileName: '示例报告.pdf',
+      reportDate: '2024-03-15',
+      institution: '示例体检中心',
     });
     router.push('/report');
   }, [clearReport, setReport, router]);
 
-  const { state } = useReport();
+
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-12">

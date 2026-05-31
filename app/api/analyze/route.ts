@@ -216,7 +216,7 @@ function extractJson(text: string): any {
   } catch {
     const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (match) return JSON.parse(match[1].trim());
-    const braceMatch = text.match(/\{[\s\S]*\}/);
+    const braceMatch = text.match(/\{[\s\S]*?\}/);
     if (braceMatch) return JSON.parse(braceMatch[0]);
   }
   throw new Error('无法解析 JSON');

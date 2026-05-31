@@ -14,9 +14,20 @@ export function getHistory(): HistoryReport[] {
 
 export function saveReport(report: HistoryReport): void {
   if (typeof window === 'undefined') return;
-  const history = getHistory();
-  history.unshift(report);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  try {
+    const history = getHistory();
+    // 按日期+机构去重，同一天同机构只保留一份
+    const exists = history.some(
+      (h) => h.date === report.date && h.institution === report.institution
+    );
+    if (exists) return;
+    history.unshift(report);
+    // 限制最多保存 50 份，防止超出 localStorage 配额
+    if (history.length > 50) history.length = 50;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  } catch {
+    // QuotaExceededError 或其他存储异常，静默失败避免崩溃
+  }
 }
 
 export function deleteReport(id: string): void {

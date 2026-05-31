@@ -34,7 +34,7 @@ const levelMap = {
 };
 
 export function AbnormalCard({ item }: AbnormalCardProps) {
-  const config = suggestionConfig[item.suggestion];
+  const config = suggestionConfig[item.suggestion] ?? suggestionConfig.yellow;
 
   return (
     <Card className={`overflow-hidden border border-gray-100 border-l-4 ${config.border} shadow-sm`}>

@@ -33,7 +33,7 @@ export default function ReportPage() {
         toast.success('摘要已复制到剪贴板');
       }
     } catch {
-      // ignore
+      toast.error('分享失败，请手动复制');
     }
   };
 

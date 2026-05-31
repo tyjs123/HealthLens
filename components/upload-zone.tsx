@@ -48,8 +48,17 @@ export function UploadZone({ onUpload, loading, statusText }: UploadZoneProps) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label="上传体检报告 PDF"
       className={cn(
-        'relative flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 transition-colors cursor-pointer',
+        'relative flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2',
         isDragOver
           ? 'border-blue-500 bg-blue-50'
           : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
@@ -61,6 +70,7 @@ export function UploadZone({ onUpload, loading, statusText }: UploadZoneProps) {
         accept=".pdf"
         className="hidden"
         onChange={handleChange}
+        disabled={loading}
       />
       {loading ? (
         <>
