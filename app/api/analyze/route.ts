@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractDate } from '@/lib/extract-date';
 
+export const runtime = 'edge';
+
 const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检报告文本中提取所有信息，并以严格 JSON 格式返回。
 
 必须包含以下字段：
@@ -372,25 +374,33 @@ export async function POST(req: NextRequest) {
     }
 
     if (!content) {
-      return NextResponse.json(mockData());
+      return NextResponse.json(
+        { error: 'AI 服务响应超时或不可用，请稍后重试。如报告页数较多，建议拆分后逐页上传。' },
+        { status: 503 }
+      );
     }
 
     try {
       const parsed = extractJson(content);
       const adapted = adaptFormat(parsed, text);
 
-      // 校验关键字段
+      // 校验关键字段，放宽条件：允许 summary 为空，只要有指标数据即可
       if (
-        !adapted.summary ||
         !Array.isArray(adapted.abnormalItems) ||
         !Array.isArray(adapted.normalItems)
       ) {
-        return NextResponse.json(mockData());
+        return NextResponse.json(
+          { error: 'AI 返回的数据格式不完整，请重试' },
+          { status: 422 }
+        );
       }
 
       return NextResponse.json(adapted);
-    } catch {
-      return NextResponse.json(mockData());
+    } catch (e: any) {
+      return NextResponse.json(
+        { error: 'AI 返回格式异常，请重试。' + (e.message || '') },
+        { status: 422 }
+      );
     }
   } catch (e: any) {
     return NextResponse.json(
