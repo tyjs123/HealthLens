@@ -114,7 +114,6 @@ export function extractDate(text: string): string {
   const pattern4 = /(\d{4})(\d{2})(\d{2})\b/g;
   while ((m = pattern4.exec(text)) !== null) {
     if (overlaps(matches, m.index, m.index + m[0].length)) continue;
-    const year = parseInt(m[1], 10);
     const month = parseInt(m[2], 10);
     const day = parseInt(m[3], 10);
     if (month < 1 || month > 12 || day < 1 || day > 31) continue;
