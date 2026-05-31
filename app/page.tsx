@@ -145,6 +145,7 @@ export default function HomePage() {
         });
 
         setStatus('生成解读中…');
+        toast.success('分析完成，正在生成解读…');
         router.push('/report');
       } catch (err: any) {
         const msg = err.message || '报告解析异常，请重试或更换报告';

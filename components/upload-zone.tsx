@@ -37,7 +37,11 @@ export function UploadZone({ onUpload, loading, statusText }: UploadZoneProps) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (file) onUpload(file);
+      if (file) {
+        onUpload(file);
+        // 清空 input，确保下次选择同一文件也能触发 onChange
+        e.target.value = '';
+      }
     },
     [onUpload]
   );
