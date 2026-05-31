@@ -13,7 +13,7 @@ import type { HistoryReport } from '@/types';
 import { toast } from 'sonner';
 import { Activity, FileSearch, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { AnalyzeResult } from '@/types';
+
 
 // BMI 兜底计算：如果 AI 没返回 BMI，前端根据身高体重自动计算
 function ensureBMI(report: { abnormalItems: any[]; normalItems: any[] }) {
@@ -93,7 +93,10 @@ export default function HomePage() {
         }
 
         setStatus('AI 分析中…');
-        const data: AnalyzeResult = await analyzeReport(text);
+        const data = await analyzeReport(text);
+        if (data.isMock) {
+          toast.error('AI 分析服务暂时不可用，当前显示的是示例数据。请检查 API Key 配置或稍后重试。');
+        }
         ensureBMI(data);
 
         // 优先使用 AI 提取的日期，若为空则从 PDF 文本中兜底提取

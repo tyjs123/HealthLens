@@ -5,7 +5,7 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
-export async function analyzeReport(text: string): Promise<AnalyzeResult> {
+export async function analyzeReport(text: string): Promise<AnalyzeResult & { isMock?: boolean }> {
   try {
     const res = await fetch('/api/analyze', {
       method: 'POST',
@@ -22,7 +22,7 @@ export async function analyzeReport(text: string): Promise<AnalyzeResult> {
   } catch {
     // 静态导出或无 API Key 时回退到模拟数据（深拷贝，防止被外部修改污染）
     return new Promise((resolve) => {
-      setTimeout(() => resolve(deepClone(sampleReport)), 1200);
+      setTimeout(() => resolve({ ...deepClone(sampleReport), isMock: true }), 1200);
     });
   }
 }
