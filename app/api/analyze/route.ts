@@ -19,7 +19,7 @@ const SYSTEM_PROMPT = `你是一位体检报告解读助手。请从以下体检
 - unit: 单位
 - ref: 参考区间，必须填写
 - level: 异常程度，只能是 "slight" | "moderate" | "severe"
-- plainText: 80字以内的通俗解释
+- plainText: 80字以内的通俗解释。不要包含双引号("), 如果必须引用请用单引号(')。不要包含换行符，所有内容写在一行
 - suggestion: 三级建议，只能是 "green" | "yellow" | "red"
 
 多年报告拆分规则（非常重要）：
@@ -79,6 +79,12 @@ BMI 计算：
    - 心率：60-100 (次/分)
 5. 医师意见中的关键描述要保留在 plainText 中（如"尿酸较往年轻度升高"、"裸眼视力较前略有下降"）
 6. 体检结论为"合格"不代表所有指标完美，仍需根据具体数值判断异常项
+
+JSON 格式要求（非常重要）：
+1. 所有字符串值不要包含未转义的双引号("), 必须使用 \" 转义或改用单引号(')
+2. 所有字符串值不要包含换行符(\n), 所有内容写在一行
+3. 数组元素之间必须有逗号分隔，最后一个元素后面不要加逗号
+4. 确保 JSON 完整闭合，不要截断
 
 示例输出：
 {
@@ -250,15 +256,56 @@ function adaptFormat(raw: any, text?: string) {
   return result;
 }
 
-function extractJson(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {
-    const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (match) return JSON.parse(match[1].trim());
-    const braceMatch = text.match(/\{[\s\S]*?\}/);
-    if (braceMatch) return JSON.parse(braceMatch[0]);
+function repairJson(text: string): string {
+  let repaired = text;
+
+  // 1. 去掉数组/对象末尾的 trailing comma（最常见错误）
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+  // 2. 修复字符串中未转义的双引号（简单模式：中文字符后的双引号）
+  // 将字符串内未转义的双引号替换为单引号
+  repaired = repaired.replace(/: "([^"]*)"([^,}\]])([^"]*)"/g, ': "$1\'$2$3"');
+
+  // 3. 如果 JSON 被截断，尝试补全闭合括号
+  const openBraces = (repaired.match(/\{/g) || []).length;
+  const closeBraces = (repaired.match(/\}/g) || []).length;
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  const closeBrackets = (repaired.match(/\]/g) || []).length;
+
+  if (openBraces > closeBraces) {
+    repaired += '}'.repeat(openBraces - closeBraces);
   }
+  if (openBrackets > closeBrackets) {
+    repaired += ']'.repeat(openBrackets - closeBrackets);
+  }
+
+  return repaired;
+}
+
+function extractJson(text: string): any {
+  const candidates: string[] = [text];
+
+  // 从代码块中提取
+  const codeMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeMatch) candidates.push(codeMatch[1].trim());
+
+  // 从文本中提取第一个 {...}
+  const braceMatch = text.match(/\{[\s\S]*?\}/);
+  if (braceMatch) candidates.push(braceMatch[0]);
+
+  // 尝试所有候选，先原样解析，再修复后解析
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      try {
+        return JSON.parse(repairJson(candidate));
+      } catch {
+        // continue
+      }
+    }
+  }
+
   throw new Error('无法解析 JSON');
 }
 
