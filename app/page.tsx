@@ -6,7 +6,9 @@ import { UploadZone } from '@/components/upload-zone';
 import { useReport } from '@/context/report-context';
 import { extractTextFromPdf } from '@/lib/pdf-parser';
 import { analyzeReport } from '@/lib/deepseek';
+import { saveReport, extractCoreMetrics } from '@/lib/storage';
 import { sampleReport } from '@/data/sample-report';
+import type { HistoryReport } from '@/types';
 import { toast } from 'sonner';
 import { Activity, FileSearch, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -92,6 +94,27 @@ export default function HomePage() {
         setStatus('AI 分析中…');
         const data: AnalyzeResult = await analyzeReport(text);
         ensureBMI(data);
+
+        // 如果包含多年报告数据，自动保存各年份到历史记录
+        if (data.yearlyReports && data.yearlyReports.length > 0) {
+          for (const yr of data.yearlyReports) {
+            const report: HistoryReport = {
+              id: `${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`,
+              date: yr.year || data.reportDate || new Date().toISOString().split('T')[0],
+              institution: data.institution || '',
+              summary: yr.summary || data.summary,
+              abnormalCount: yr.abnormalItems.length,
+              coreMetrics: extractCoreMetrics(yr.abnormalItems, yr.normalItems),
+              fullData: {
+                summary: yr.summary || data.summary,
+                abnormalItems: yr.abnormalItems,
+                normalItems: yr.normalItems,
+              },
+            };
+            saveReport(report);
+          }
+          toast.success(`已自动保存 ${data.yearlyReports.length} 份历年报告`);
+        }
 
         setReport({
           rawText: text,

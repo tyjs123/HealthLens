@@ -38,11 +38,12 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
 function detectTrend(values: number[]): { direction: 'up' | 'down' | 'stable'; warning: string } {
   if (values.length < 2) return { direction: 'stable', warning: '' };
 
-  const recent = values.slice(-2);
+  // history 是 newest-first，前两个元素是最新的
+  const recent = values.slice(0, 2);
   if (recent.length < 2) return { direction: 'stable', warning: '' };
 
-  const diff = recent[1] - recent[0];
-  const threshold = Math.abs(recent[0]) * 0.05;
+  const diff = recent[0] - recent[1];
+  const threshold = Math.abs(recent[1]) * 0.05;
 
   if (Math.abs(diff) < threshold) return { direction: 'stable', warning: '' };
 
@@ -60,20 +61,22 @@ function detectTrend(values: number[]): { direction: 'up' | 'down' | 'stable'; w
 
 export function TrendChart({ history }: TrendChartProps) {
   const chartData = useMemo<ChartDataPoint[]>(() => {
-    return history.map((report) => ({
-      year: report.date,
-      uricAcid: report.coreMetrics.uricAcid,
-      bloodPressureSys: report.coreMetrics.bloodPressureSys,
-      bloodPressureDia: report.coreMetrics.bloodPressureDia,
-      bloodSugar: report.coreMetrics.bloodSugar,
-      totalCholesterol: report.coreMetrics.totalCholesterol,
-      triglycerides: report.coreMetrics.triglycerides,
-      hdl: report.coreMetrics.hdl,
-      ldl: report.coreMetrics.ldl,
-      alt: report.coreMetrics.alt,
-      ast: report.coreMetrics.ast,
-      bmi: report.coreMetrics.bmi,
-    }));
+    return [...history]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((report) => ({
+        year: report.date,
+        uricAcid: report.coreMetrics.uricAcid,
+        bloodPressureSys: report.coreMetrics.bloodPressureSys,
+        bloodPressureDia: report.coreMetrics.bloodPressureDia,
+        bloodSugar: report.coreMetrics.bloodSugar,
+        totalCholesterol: report.coreMetrics.totalCholesterol,
+        triglycerides: report.coreMetrics.triglycerides,
+        hdl: report.coreMetrics.hdl,
+        ldl: report.coreMetrics.ldl,
+        alt: report.coreMetrics.alt,
+        ast: report.coreMetrics.ast,
+        bmi: report.coreMetrics.bmi,
+      }));
   }, [history]);
 
   const metricWarnings = useMemo(() => {
