@@ -72,7 +72,7 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
     const coreMetrics = extractCoreMetrics(state.abnormalItems, state.normalItems);
     const report: HistoryReport = {
       id: `${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`,
-      date: state.reportDate || new Date().toISOString().split('T')[0],
+      date: state.reportDate?.trim() || new Date().toISOString().split('T')[0],
       institution: state.institution,
       summary: state.summary,
       abnormalCount: state.abnormalItems.length,

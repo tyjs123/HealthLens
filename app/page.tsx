@@ -7,6 +7,7 @@ import { useReport } from '@/context/report-context';
 import { extractTextFromPdf } from '@/lib/pdf-parser';
 import { analyzeReport } from '@/lib/deepseek';
 import { saveReport, extractCoreMetrics } from '@/lib/storage';
+import { extractDate } from '@/lib/extract-date';
 import { sampleReport } from '@/data/sample-report';
 import type { HistoryReport } from '@/types';
 import { toast } from 'sonner';
@@ -95,12 +96,15 @@ export default function HomePage() {
         const data: AnalyzeResult = await analyzeReport(text);
         ensureBMI(data);
 
+        // 优先使用 AI 提取的日期，若为空则从 PDF 文本中兜底提取
+        const reportDate = data.reportDate?.trim() || extractDate(text) || '';
+
         // 如果包含多年报告数据，自动保存各年份到历史记录
         if (data.yearlyReports && data.yearlyReports.length > 0) {
           for (const yr of data.yearlyReports) {
             const report: HistoryReport = {
               id: `${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`,
-              date: yr.year || data.reportDate || new Date().toISOString().split('T')[0],
+              date: yr.year?.trim() || reportDate || new Date().toISOString().split('T')[0],
               institution: data.institution || '',
               summary: yr.summary || data.summary,
               abnormalCount: yr.abnormalItems.length,
@@ -122,7 +126,7 @@ export default function HomePage() {
           abnormalItems: data.abnormalItems || [],
           normalItems: data.normalItems || [],
           fileName: file.name,
-          reportDate: data.reportDate || '',
+          reportDate,
           institution: data.institution || '',
         });
 
