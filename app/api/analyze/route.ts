@@ -352,6 +352,67 @@ function extractJson(text: string): any {
   throw new Error('无法解析 JSON');
 }
 
+/**
+ * 后备策略：当 JSON 解析完全失败时，从 AI 返回的原始文本中直接提取关键信息
+ */
+function tryExtractFromRawText(aiText: string, originalText: string): any | null {
+  try {
+    const result: any = {
+      summary: '',
+      abnormalItems: [],
+      normalItems: [],
+      yearlyReports: [],
+      reportDate: extractDate(originalText),
+      institution: extractInstitution(originalText),
+    };
+
+    // 尝试提取 summary：找包含"整体"、"摘要"、"总结"的句子，或取前150字符
+    const summaryMatch = aiText.match(/(?:整体|摘要|总结|概述)[：:]?\s*([^\n]{10,200})/);
+    if (summaryMatch) {
+      result.summary = summaryMatch[1].trim();
+    } else {
+      result.summary = aiText.replace(/\s+/g, ' ').slice(0, 150).trim();
+    }
+
+    // 尝试从文本中提取指标描述
+    const lines = aiText.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // 异常指标：包含"异常"、"偏高"、"偏低"、"超标"、"不合格"等关键词
+      if (/(异常|偏高|偏低|超标|不合格|升高|降低|过重|肥胖|近视|不足|减少|阳性)/.test(trimmed)) {
+        // 尝试提取指标名和数值
+        const nameMatch = trimmed.match(/^([\u4e00-\u9fa5]{2,10})[：:]?\s*(.+)/);
+        if (nameMatch) {
+          const name = nameMatch[1];
+          const desc = nameMatch[2];
+          // 尝试提取数值
+          const valueMatch = desc.match(/(\d+\.?\d*)\s*([\u4e00-\u9fa5a-zA-Z/²%°μ]+)/);
+          result.abnormalItems.push({
+            name,
+            value: valueMatch ? valueMatch[1] : desc.slice(0, 20),
+            unit: valueMatch ? valueMatch[2] : '',
+            ref: '',
+            level: 'slight',
+            plainText: desc.slice(0, 80),
+            suggestion: 'yellow',
+          });
+        }
+      }
+    }
+
+    // 如果没有提取到任何异常指标，但至少提取到了 summary，也返回
+    if (result.summary) {
+      return result;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function callOpenAICompatible(
   endpoint: string,
   apiKey: string,
@@ -470,6 +531,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 记录 AI 原始返回的前 1000 字符，方便排查
+    console.log('[HealthLens] AI raw content length:', content.length);
+    console.log('[HealthLens] AI raw content preview:', content.slice(0, 1000));
+
     try {
       const parsed = extractJson(content);
       const adapted = adaptFormat(parsed, text);
@@ -487,6 +552,13 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json(adapted);
     } catch (e: any) {
+      // JSON 解析完全失败，尝试从 AI 返回的文本中直接提取关键信息作为后备
+      const fallback = tryExtractFromRawText(content, text);
+      if (fallback) {
+        console.log('[HealthLens] JSON 解析失败，已使用后备提取策略');
+        return NextResponse.json(fallback);
+      }
+
       return NextResponse.json(
         { error: 'AI 返回格式异常，请重试。' + (e.message || '') },
         { status: 422 }
