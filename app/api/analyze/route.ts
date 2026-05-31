@@ -257,16 +257,49 @@ function adaptFormat(raw: any, text?: string) {
 }
 
 function repairJson(text: string): string {
-  let repaired = text;
+  // 使用状态机遍历文本，修复字符串中的非法字符
+  let repaired = '';
+  let inString = false;
+  let escaped = false;
 
-  // 1. 去掉数组/对象末尾的 trailing comma（最常见错误）
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (!inString) {
+      // 不在字符串中：处理 JSON 结构
+      if (char === '"') {
+        inString = true;
+        repaired += char;
+      } else if (char === '\n' || char === '\r') {
+        // JSON 结构中的换行符替换为空格
+        repaired += ' ';
+      } else {
+        repaired += char;
+      }
+    } else {
+      // 在字符串中
+      if (escaped) {
+        repaired += char;
+        escaped = false;
+      } else if (char === '\\') {
+        repaired += char;
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+        repaired += char;
+      } else if (char === '\n' || char === '\r') {
+        // 字符串中的换行符，替换为空格（最常见导致解析失败的原因）
+        repaired += ' ';
+      } else {
+        repaired += char;
+      }
+    }
+  }
+
+  // 去掉数组/对象末尾的 trailing comma
   repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
 
-  // 2. 修复字符串中未转义的双引号（简单模式：中文字符后的双引号）
-  // 将字符串内未转义的双引号替换为单引号
-  repaired = repaired.replace(/: "([^"]*)"([^,}\]])([^"]*)"/g, ': "$1\'$2$3"');
-
-  // 3. 如果 JSON 被截断，尝试补全闭合括号
+  // 如果 JSON 被截断，尝试补全闭合括号
   const openBraces = (repaired.match(/\{/g) || []).length;
   const closeBraces = (repaired.match(/\}/g) || []).length;
   const openBrackets = (repaired.match(/\[/g) || []).length;
@@ -283,13 +316,23 @@ function repairJson(text: string): string {
 }
 
 function extractJson(text: string): any {
-  const candidates: string[] = [text];
+  const candidates: string[] = [];
 
-  // 从代码块中提取
+  // 候选1：整个文本
+  candidates.push(text);
+
+  // 候选2：从代码块中提取
   const codeMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeMatch) candidates.push(codeMatch[1].trim());
 
-  // 从文本中提取第一个 {...}
+  // 候选3：从第一个 { 到最后一个 }（贪婪匹配，应对嵌套结构）
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    candidates.push(text.slice(firstBrace, lastBrace + 1));
+  }
+
+  // 候选4：非贪婪匹配第一个 {...}
   const braceMatch = text.match(/\{[\s\S]*?\}/);
   if (braceMatch) candidates.push(braceMatch[0]);
 
