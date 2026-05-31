@@ -33,6 +33,11 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   alt: { label: '谷丙转氨酶', unit: 'U/L' },
   ast: { label: '谷草转氨酶', unit: 'U/L' },
   bmi: { label: 'BMI', unit: 'kg/m²' },
+  wbc: { label: '白细胞计数', unit: '10^9/L' },
+  rbc: { label: '红细胞计数', unit: '10^12/L' },
+  hemoglobin: { label: '血红蛋白', unit: 'g/L' },
+  platelet: { label: '血小板', unit: '10^9/L' },
+  heartRate: { label: '心率', unit: '次/分' },
 };
 
 function detectTrend(values: number[]): { direction: 'up' | 'down' | 'stable'; warning: string } {
