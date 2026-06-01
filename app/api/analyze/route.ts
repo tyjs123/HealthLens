@@ -436,8 +436,16 @@ async function callOpenAICompatible(
       max_tokens: 4096,
     }),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    console.error(`[HealthLens] ${model} API error: HTTP ${res.status}`, errBody.slice(0, 500));
+    throw new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+  }
   const data = await res.json();
+  if (data.error) {
+    console.error(`[HealthLens] ${model} API error:`, data.error);
+    throw new Error(data.error.message || String(data.error));
+  }
   return data.choices?.[0]?.message?.content;
 }
 
@@ -506,7 +514,7 @@ export async function POST(req: NextRequest) {
         content = await callOpenAICompatible(
           'https://api.moonshot.cn/v1',
           apiKey,
-          'moonshot-v1-8k',
+          'moonshot-v1-32k',
           text
         );
       } catch {
