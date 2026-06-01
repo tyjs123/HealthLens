@@ -433,6 +433,7 @@ async function callOpenAICompatible(
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2,
+      max_tokens: 4096,
     }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
