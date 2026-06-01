@@ -41,13 +41,13 @@ export async function analyzeReport(text: string): Promise<AnalyzeResult & { isM
 
     return data;
   } catch (err: any) {
-    // 如果已经抛出了带有错误信息的异常，直接向上抛
-    if (err.message && !err.message.includes('AI 分析失败')) {
-      throw err;
+    // 只有 fetch 网络错误（如静态导出时没有后端）才 fallback 到模拟数据
+    // API 返回的业务错误（HTTP 4xx/5xx、data.error 等）一律向上抛给调用方显示
+    if (err instanceof TypeError || err.name === 'TypeError') {
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({ ...deepClone(sampleReport), isMock: true }), 1200);
+      });
     }
-    // 静态导出或无 API Key 时回退到模拟数据（深拷贝，防止被外部修改污染）
-    return new Promise((resolve) => {
-      setTimeout(() => resolve({ ...deepClone(sampleReport), isMock: true }), 1200);
-    });
+    throw err;
   }
 }
