@@ -478,7 +478,7 @@ async function callClaude(apiKey: string, text: string) {
     },
     body: JSON.stringify({
       model: 'claude-3-sonnet-20240229',
-      max_tokens: 4096,
+      max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: `以下是体检报告文本：\n\n${text}` }],
     }),
@@ -505,33 +505,34 @@ export async function POST(req: NextRequest) {
 
     const cleanText = sanitizeTextForApi(text);
 
-    const apiKey =
-      process.env.DEEPSEEK_API_KEY ||
-      process.env.MOONSHOT_API_KEY ||
-      process.env.ANTHROPIC_API_KEY ||
-      '';
-    if (!apiKey) {
+    // 按环境变量智能路由，避免逐个尝试浪费时间（Edge Runtime 30s 限制很紧）
+    const dsKey = process.env.DEEPSEEK_API_KEY;
+    const msKey = process.env.MOONSHOT_API_KEY;
+    const antKey = process.env.ANTHROPIC_API_KEY;
+    const customBase = process.env.OPENAI_BASE_URL;
+    const customModel = process.env.OPENAI_MODEL;
+
+    if (!dsKey && !msKey && !antKey && !customBase) {
       return NextResponse.json(mockData());
     }
 
     let content: string | undefined;
     const errors: string[] = [];
 
-    // 策略1：Claude
-    if (apiKey.startsWith('sk-ant-')) {
+    // 优先直接用对应 key，避免串行 fallback 浪费时间
+    if (antKey) {
       try {
-        content = await callClaude(apiKey, cleanText);
+        content = await callClaude(antKey, cleanText);
       } catch (err: any) {
         errors.push(`Claude: ${err.message || '失败'}`);
       }
     }
 
-    // 策略2：OpenAI 兼容（DeepSeek / Moonshot / 代理）
-    if (!content) {
+    if (!content && dsKey) {
       try {
         content = await callOpenAICompatible(
           'https://api.deepseek.com',
-          apiKey,
+          dsKey,
           'deepseek-chat',
           cleanText
         );
@@ -539,41 +540,42 @@ export async function POST(req: NextRequest) {
         errors.push(`DeepSeek: ${err.message || '失败'}`);
       }
     }
-    if (!content) {
+
+    if (!content && msKey) {
       try {
         content = await callOpenAICompatible(
           'https://api.moonshot.cn/v1',
-          apiKey,
+          msKey,
           'moonshot-v1-32k',
           cleanText
         );
       } catch (err: any) {
         errors.push(`Moonshot: ${err.message || '失败'}`);
+        // Moonshot JSON 模式失败时 fallback 到普通模式
+        try {
+          content = await callOpenAICompatible(
+            'https://api.moonshot.cn/v1',
+            msKey,
+            'moonshot-v1-32k',
+            cleanText,
+            false
+          );
+        } catch (err2: any) {
+          errors.push(`Moonshot(无JSON模式): ${err2.message || '失败'}`);
+        }
       }
     }
-    if (!content) {
+
+    if (!content && customBase) {
       try {
-        // 最后尝试不用 json_object 模式（某些 API 可能不支持）
         content = await callOpenAICompatible(
-          'https://api.moonshot.cn/v1',
-          apiKey,
-          'moonshot-v1-32k',
-          cleanText,
-          false
+          customBase,
+          dsKey || msKey || antKey || '',
+          customModel || 'gpt-3.5-turbo',
+          cleanText
         );
       } catch (err: any) {
-        errors.push(`Moonshot(无JSON模式): ${err.message || '失败'}`);
-      }
-    }
-    if (!content) {
-      const baseUrl = process.env.OPENAI_BASE_URL;
-      const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
-      if (baseUrl) {
-        try {
-          content = await callOpenAICompatible(baseUrl, apiKey, model, cleanText);
-        } catch (err: any) {
-          errors.push(`Custom: ${err.message || '失败'}`);
-        }
+        errors.push(`Custom: ${err.message || '失败'}`);
       }
     }
 
