@@ -417,36 +417,55 @@ async function callOpenAICompatible(
   endpoint: string,
   apiKey: string,
   model: string,
-  text: string
+  text: string,
+  useJsonMode = true
 ) {
-  const res = await fetch(`${endpoint}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `以下是体检报告文本：\n\n${text}` },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-      max_tokens: 4096,
-    }),
-  });
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '');
-    console.error(`[HealthLens] ${model} API error: HTTP ${res.status}`, errBody.slice(0, 500));
-    throw new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+  const body: any = {
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `以下是体检报告文本：\n\n${text}` },
+    ],
+    temperature: 0.2,
+    max_tokens: 4096,
+  };
+  if (useJsonMode) {
+    body.response_format = { type: 'json_object' };
   }
-  const data = await res.json();
-  if (data.error) {
-    console.error(`[HealthLens] ${model} API error:`, data.error);
-    throw new Error(data.error.message || String(data.error));
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s 超时
+
+  try {
+    const res = await fetch(`${endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      console.error(`[HealthLens] ${model} API error: HTTP ${res.status}`, errBody.slice(0, 500));
+      throw new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    if (data.error) {
+      console.error(`[HealthLens] ${model} API error:`, data.error);
+      throw new Error(data.error.message || String(data.error));
+    }
+    return data.choices?.[0]?.message?.content;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('请求超时（25秒）');
+    }
+    throw err;
   }
-  return data.choices?.[0]?.message?.content;
 }
 
 async function callClaude(apiKey: string, text: string) {
@@ -469,12 +488,22 @@ async function callClaude(apiKey: string, text: string) {
   return data.content?.[0]?.text;
 }
 
+function sanitizeTextForApi(text: string): string {
+  // 移除可能导致 JSON/API 问题的控制字符（保留换行制表空格）
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    // 移除零宽字符
+    .replace(/[\u200B-\u200F\uFEFF]/g, '');
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { text } = await req.json();
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ error: '缺少文本内容' }, { status: 400 });
     }
+
+    const cleanText = sanitizeTextForApi(text);
 
     const apiKey =
       process.env.DEEPSEEK_API_KEY ||
@@ -486,13 +515,14 @@ export async function POST(req: NextRequest) {
     }
 
     let content: string | undefined;
+    const errors: string[] = [];
 
     // 策略1：Claude
     if (apiKey.startsWith('sk-ant-')) {
       try {
-        content = await callClaude(apiKey, text);
-      } catch {
-        /* ignore */
+        content = await callClaude(apiKey, cleanText);
+      } catch (err: any) {
+        errors.push(`Claude: ${err.message || '失败'}`);
       }
     }
 
@@ -503,10 +533,10 @@ export async function POST(req: NextRequest) {
           'https://api.deepseek.com',
           apiKey,
           'deepseek-chat',
-          text
+          cleanText
         );
-      } catch {
-        /* ignore */
+      } catch (err: any) {
+        errors.push(`DeepSeek: ${err.message || '失败'}`);
       }
     }
     if (!content) {
@@ -515,10 +545,24 @@ export async function POST(req: NextRequest) {
           'https://api.moonshot.cn/v1',
           apiKey,
           'moonshot-v1-32k',
-          text
+          cleanText
         );
-      } catch {
-        /* ignore */
+      } catch (err: any) {
+        errors.push(`Moonshot: ${err.message || '失败'}`);
+      }
+    }
+    if (!content) {
+      try {
+        // 最后尝试不用 json_object 模式（某些 API 可能不支持）
+        content = await callOpenAICompatible(
+          'https://api.moonshot.cn/v1',
+          apiKey,
+          'moonshot-v1-32k',
+          cleanText,
+          false
+        );
+      } catch (err: any) {
+        errors.push(`Moonshot(无JSON模式): ${err.message || '失败'}`);
       }
     }
     if (!content) {
@@ -526,16 +570,19 @@ export async function POST(req: NextRequest) {
       const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
       if (baseUrl) {
         try {
-          content = await callOpenAICompatible(baseUrl, apiKey, model, text);
-        } catch {
-          /* ignore */
+          content = await callOpenAICompatible(baseUrl, apiKey, model, cleanText);
+        } catch (err: any) {
+          errors.push(`Custom: ${err.message || '失败'}`);
         }
       }
     }
 
     if (!content) {
       return NextResponse.json(
-        { error: 'AI 服务响应超时或不可用，请稍后重试。如报告页数较多，建议拆分后逐页上传。' },
+        {
+          error: `AI 分析失败。${errors.join('；')}`,
+          errorDetails: errors,
+        },
         { status: 503 }
       );
     }
